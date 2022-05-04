@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+canvas {
+    border:1px solid #d3d3d3;
+    background-color: #f1f1f1;
+}
+</style>
+</head>
+<body onload="paintGame()">
+<script>
+
+    window.indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB ||
+        window.msIndexedDB;
+
+    window.IDBTransaction = window.IDBTransaction || window.webkitIDBTransaction ||
+        window.msIDBTransaction;
+    window.IDBKeyRange = window.IDBKeyRange ||
+        window.webkitIDBKeyRange || window.msIDBKeyRange
+
+    if (!window.indexedDB) {
+        window.alert("Your browser doesn't support a stable version of IndexedDB.")
+    }
+
+    let myDataBase;
+    var dbRequest = window.indexedDB.open("MyTestDatabase", 3);
+    dbRequest.onsuccess = event => {
+        myDataBase = event.target.result;
+        myDataBase.createObjectStore("results", {keyPath: "nick"});
+    };
+
+
+var myGamePiece;
+var myObstacles = [];
+var myBall;
+var myScoreboard;
+
+function keyDownHandler(e) {
+    console.log(e);
+    switch (e.code) {
+        case 'ArrowLeft':
+            moveleft();
+            break;
+        case 'ArrowRight':
+            moveright();
+            break;
+    }
+}
+
+function keyUpHandler(e) {
+    console.log(e);
+    switch (e.code) {
+        case 'ArrowLeft':
+        case 'ArrowRight':
+            clearmove();
+            break;
+    }
+}
+
+function paintGame() {
+    myGamePiece = new component(100, 20, "red", 250, 580);
+    myBall = new ball(10, "green", 100, 200);
+    myScoreboard = new scoreboard("black", 10, 400);
+    for(i=0; i<3 ;i++) {
+        for(j=0; j<10; j++) {
+            myObstacles.push(new obstacle(50, 10, "blue",  25 +(j*55), 10 +(i*15)));
+        }
+    }
+    myGameArea.paint();
+}
+
+var myGameArea = {
+    isStarted : false,
+    canvas : document.createElement("canvas"),
+    paint: function() {
+        this.canvas.width = 600;
+        this.canvas.height = 600;
+        this.context = this.canvas.getContext("2d");
+        document.body.insertBefore(this.canvas, document.body.childNodes[0]);
+    },
+    start : function() {
+        if (!this.isStarted)
+        {
+            document.onkeydown = keyDownHandler;
+            document.onkeyup = keyUpHandler;
+            this.interval = setInterval(updateGameArea, 20);
+            this.isStarted = true;
+        }
+    },
+    stop : function() {
+        if (this.isStarted)
+        {
+            clearInterval(this.interval);
+            this.clear();
+            paintGame();
+            this.isStarted = false;
+        }
+    },
+    clear : function() {
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    },
+    gameOver: function() {
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.paint();
+        this.context.fillText("Game Over!",this.canvas.width/2, this.canvas.width/2);
+        let dbrequest = { "id": 0, "nick" : "anonymous", "score": myScoreboard.getScore(), "playtime" : "0:22:00"};
+
+    }
+}
+
+function ball(radius, color, x, y)
+{
+	this.radius = radius;
+    this.x = x;
+    this.y = y;
+    this.speedX = 5;
+    this.speedY = 5;
+    this.goingDown = true;
+    
+    this.collision = function(pad) {
+        if (this.x + this.radius >= pad.x && this.x + this.radius <= pad.x + pad.width
+        			&& this.y + this.radius >= pad.y)
+        {
+        	this.speedY *= -1;
+        }
+        else if (this.y + this.radius >= 600 || this.y + this.radius <= 10 )
+        {
+            // myGameArea.gameOver();
+        	this.speedY *= -1;
+        } else if (this.x + this.radius >= 600 || this.x + this.radius <= 10 ) {
+            this.speedX *= -1;
+        }
+    }
+
+    this.obstacleBounce = function() {
+        this.speedY *= -1;
+    }
+
+    this.update = function() {
+        ctx = myGameArea.context;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, 2*Math.PI, true);
+        ctx.fillStyle = color;
+        ctx.closePath();
+        ctx.fill();
+    }
+    
+    this.newPos = function() {
+    	this.collision(myGamePiece);
+        this.x += this.speedX;
+        this.y += this.speedY;
+    }    
+}
+
+function obstacle(width, height, color, x, y) {
+    this.width = width;
+    this.height = height;
+    this.x = x;
+    this.y = y;
+    this.update = function () {
+        ctx = myGameArea.context;
+        ctx.fillStyle = color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+    }
+    this.clear = function () {
+        ctx.clearRect(this.x, this.y, this.width, this.height);
+    }
+
+}
+
+function component(width, height, color, x, y) {
+    this.width = width;
+    this.height = height;
+    this.speedX = 0;
+    this.speedY = 0;
+    this.x = x;
+    this.y = y;
+    this.update = function() {
+        ctx = myGameArea.context;
+        ctx.fillStyle = color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+    }
+    this.newPos = function() {
+        if ( (this.x + this.speedX) > 0 && (this.x + this.speedX) < (600 - 100))
+        {
+        	this.x += this.speedX;
+        	this.y += this.speedY;
+        }
+
+    }
+}
+
+function scoreboard( color, x, y) {
+    this.x = x;
+    this.y = y;
+    this.score = 0;
+    this.update = function() {
+        ctx = myGameArea.context;
+        ctx.fillStyle = color;
+        ctx.fillText("Score: " + this.score, this.x, this.y);
+    }
+    this.increase = function() {
+        this.score++;
+    }
+    this.getScore = function() {
+        return this.score;
+    }
+}
+
+function updateGameArea() {
+    myGameArea.clear();
+    myBall.newPos();
+    myBall.update();
+    for(i=0; i < myObstacles.length; i++)
+    {
+        if(ballComponentColliding(myBall, myObstacles[i]))
+        {
+            myObstacles.splice(i, 1);
+            myBall.obstacleBounce();
+            i--;
+            myScoreboard.increase();
+        }
+    }
+    myScoreboard.update();
+    if (myScoreboard.getScore() === 30)
+    {
+        myGameArea.gameOver();
+    }
+    myObstacles.forEach(obstacle => obstacle.update());
+    myGamePiece.newPos();
+    myGamePiece.update();
+}
+
+function moveleft() {
+    myGamePiece.speedX = -5; 
+}
+
+function moveright() {
+    myGamePiece.speedX = 5; 
+}
+
+function clearmove() {
+    myGamePiece.speedX = 0; 
+    myGamePiece.speedY = 0; 
+}
+
+
+function ballComponentColliding(ball, component) {
+    var distX = Math.abs(ball.x - component.x - component.width / 2);
+    var distY = Math.abs(ball.y - component.y - component.height / 2);
+
+    if (distX > (component.width / 2 + ball.radius)) {
+        return false;
+    }
+    if (distY > (component.height / 2 + ball.radius)) {
+        return false;
+    }
+
+    if (distX <= (component.width / 2)) {
+        return true;
+    }
+    if (distY <= (component.height / 2)) {
+        return true;
+    }
+
+    var dx = distX - component.width / 2;
+    var dy = distY - component.height / 2;
+    return (dx * dx + dy * dy <= (ball.radius * ball.radius));
+}
+
+</script>
+<div style="text-align:center;width:480px;">
+ 
+  <button onmousedown="moveleft()" onmouseup="clearmove()" ontouchstart="moveleft()">LEFT</button>
+  <button onmousedown="moveright()" onmouseup="clearmove()" ontouchstart="moveright()">RIGHT</button><br><br>
+
+</div>
+<div style="text-align:center;width:480px;">
+ 
+    <button onmousedown="myGameArea.start()">START</button>
+    <button onmousedown="myGameArea.stop()">STOP</button><br><br>
+  
+  </div>
+</body>
+</html>
