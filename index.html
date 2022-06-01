@@ -10,6 +10,8 @@
 </style>
 </head>
 <body onload="paintGame()">
+<!--<body>-->
+
 <script>
 
     // This works on all devices/browsers, and uses IndexedDBShim as a final fallback
@@ -75,7 +77,6 @@ function updateDbRecords() {
         var data = store.getAll();
 
         data.onsuccess = function() {
-            console.log(data.result);
             dbRecords = data.result
             let records;
 
@@ -115,8 +116,6 @@ function keyUpHandler(e) {
 
 function paintGame() {
     myGamePiece = new component(100, 20, "red", 250, 580);
-    // myBall = new ball(10, "green", 100, 200);
-    console.log("sss");
     myScoreboard = new scoreboard("black", 10, 400);
     for(i=0; i<3 ;i++) {
         for(j=0; j<10; j++) {
@@ -137,6 +136,8 @@ var myGameArea = {
     time: 0,
     canvas : document.createElement("canvas"),
     specials : 0,
+    init : true,
+
     paint: function() {
         this.canvas.width = 600;
         this.canvas.height = 600;
@@ -146,10 +147,14 @@ var myGameArea = {
     start : function() {
         if (!this.isStarted)
         {
+            this.init = true;
             let nickInput = document.getElementById("nickInput");
             if (nickInput.value === "") {
                 alert("Provide nick first!")
             } else {
+                balls = []
+                myObstacles = [];
+                specials = [];
                 balls.push(new ball(10, "green", (Math.random()*100 + Math.random() * 60) , (Math.random()*100 +  200 + Math.random() * 40)));
                 this.clear();
                 paintGame();
@@ -194,8 +199,7 @@ function ball(radius, color, x, y)
     this.speedX = 5;
     this.speedY = 5;
     this.defaultSpeed = 3;
-    this.goingDown = true;
-    
+
     this.padCollision = function(pad) {
             if(ballComponentColliding(this, pad))
             {
@@ -233,9 +237,9 @@ function ball(radius, color, x, y)
         })
     }
 
+    this.obstacleBounce = function() {
+        this.speedY *= (-1);
 
-        this.obstacleBounce = function() {
-        this.speedY *= -1;
     }
 
     this.update = function() {
@@ -248,11 +252,9 @@ function ball(radius, color, x, y)
     }
     
     this.newPos = function() {
-    	this.padCollision(myGamePiece);
-        this.ballsCollision(balls);
         this.x += this.speedX;
         this.y += this.speedY;
-    }    
+    }
 }
 
 class obstacle {
@@ -265,7 +267,7 @@ class obstacle {
     }
 
     update = function () {
-        this.ctx = myGameArea.context;
+        let ctx = myGameArea.context;
         ctx.fillStyle = this.color;
         ctx.fillRect(this.x, this.y, this.width, this.height);
     }
@@ -279,9 +281,23 @@ class obstacleA extends obstacle {
         super(width, height, color, x, y);
     }
 
-    executeSpecial() {
-
-    }
+    executeSpecial(x, y) {
+        let bonusTest = Math.random() * 10;
+        if (bonusTest <= 2) {
+            bonusTest = Math.random() * 50;
+            if (bonusTest <= 10) {
+                specials.push(new x2Special(50, 30, "pink", x, y));
+            } else if (bonusTest <= 20) {
+                specials.push(new x5Special(50, 30, "brown", x, y));
+            } else if (bonusTest <= 30) {
+                specials.push(new xlSpecial(50, 30, "purple", x, y));
+            } else if (bonusTest <= 40) {
+                specials.push(new xsSpecial(50, 30, "gray", x, y));
+            } else {
+                specials.push(new switchSpecial(50, 30, "violet", x, y));
+            }
+        }
+     }
 }
 
 class obstacleB extends obstacle {
@@ -289,7 +305,7 @@ class obstacleB extends obstacle {
         super(width, height, color, x, y);
     }
 
-    executeSpecial() {
+    executeSpecial(x, y) {
         myGameArea.specials++;
         if (myGameArea.specials === 5) {
             balls.push(new ball(10, "green", (Math.random()*100 + Math.random() * 60) , (Math.random()*100 +  200 + Math.random() * 40)))
@@ -298,42 +314,174 @@ class obstacleB extends obstacle {
     }
 }
 
-function component(width, height, color, x, y) {
-    this.width = width;
-    this.height = height;
-    this.speedX = 0;
-    this.speedY = 0;
-    this.x = x;
-    this.y = y;
-    this.update = function() {
-        ctx = myGameArea.context;
-        ctx.fillStyle = color;
+class component {
+    constructor(width, height, color, x, y) {
+        this.width = width;
+        this.initWidth = width;
+        this.height = height;
+        this.speedX = 0;
+        this.speedY = 0;
+        this.color = color;
+        this.x = x;
+        this.y = y;
+        this.callback = null
+        this.moveDirectionCallback = null
+        this.moveDirection = 1;
+    }
+
+    setColor(color) {
+        this.color = color;
+    }
+
+    reverseMoveDirection() {
+        clearTimeout(this.moveDirectionCallback);
+        this.moveDirection = -1;
+        let that = this;
+        this.moveDirectionCallback = setTimeout(function () { that.setMoveDirectionNormal() }, 5000);
+    }
+
+    setMoveDirectionNormal() {
+        this.moveDirection = 1;
+    }
+
+    update() {
+        let ctx = myGameArea.context;
+        ctx.fillStyle = this.color;
         ctx.fillRect(this.x, this.y, this.width, this.height);
     }
-    this.newPos = function() {
+
+    newPos() {
         if ( (this.x + this.speedX) > 0 && (this.x + this.speedX) < (600 - 100))
         {
-        	this.x += this.speedX;
-        	this.y += this.speedY;
+            this.x += this.speedX;
+            this.y += this.speedY;
         }
+    }
 
+    resizeXl() {
+        clearInterval(this.callback);
+        this.width = this.initWidth * 1.2;
+        let that = this;
+        setTimeout(function () { that.resizeToNorm() }, 5000);
+    }
+
+    resizeXs() {
+        clearInterval(this.callback);
+        this.width = this.initWidth * 0.8;
+        let that = this;
+        setTimeout(function () { that.resizeToNorm() }, 5000);
+    }
+
+    resizeToNorm() {
+        this.width = this.initWidth
     }
 }
+
+class special extends obstacle {
+    constructor(text, width, height, color, x, y) {
+        super(width, height, color, x, y);
+        this.text = text;
+        this.speedY = 1;
+    }
+
+    updateSpecial() {
+        let ctx = myGameArea.context;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.fillStyle = "blue";
+        ctx.font = "13px Georgia";
+        ctx.textAlign="center";
+        ctx.fillText(this.text, this.x+(this.width/2),this.y+(this.height/2));
+    }
+
+    newPos() {
+        this.y += this.speedY;
+    }
+}
+
+class x2Special extends special {
+    constructor(width, height, color, x, y) {
+        super("Score X2", width, height, color, x, y);
+    }
+
+    execute() {
+        myScoreboard.setNewMultiplier(2);
+    }
+}
+class x5Special extends special {
+    constructor(width, height, color, x, y) {
+        super("Score X5", width, height, color, x, y);
+    }
+
+    execute() {
+        myScoreboard.setNewMultiplier(5);
+    }
+}
+
+    class xlSpecial extends special {
+        constructor(width, height, color, x, y) {
+            super("XL", width, height, color, x, y);
+        }
+
+        execute() {
+            myGamePiece.resizeXl();
+        }
+    }
+
+    class xsSpecial extends special {
+        constructor(width, height, color, x, y) {
+            super("XS", width, height, color, x, y);
+        }
+
+        execute() {
+            myGamePiece.resizeXs();
+        }
+    }
+
+    class switchSpecial extends special {
+        constructor(width, height, color, x, y) {
+            super("><", width, height, color, x, y);
+        }
+
+        execute() {
+            myGamePiece.reverseMoveDirection();
+        }
+    }
 
 function scoreboard( color, x, y) {
     this.x = x;
     this.y = y;
+    this.multiplier = 1;
     this.score = 0;
+    this.callback = null;
     this.update = function() {
         ctx = myGameArea.context;
         ctx.fillStyle = color;
         ctx.fillText("Score: " + this.score, this.x, this.y);
     }
     this.increase = function() {
-        this.score++;
+        this.score += this.multiplier;
     }
     this.getScore = function() {
         return this.score;
+    }
+
+    this.setNewMultiplier = function(multiplier) {
+        clearTimeout(this.callback);
+        let that = this;
+        this.callback = setTimeout( function () { that.removeMultiplier() }, 5000)
+
+        if (multiplier < 5) {
+            myGamePiece.setColor("pink");
+        } else {
+            myGamePiece.setColor("brown");
+        }
+        this.multiplier = multiplier;
+    }
+
+    this.removeMultiplier = function() {
+        myGamePiece.setColor("red");
+        this.multiplier = 1;
     }
 }
 
@@ -341,43 +489,66 @@ function updateGameArea() {
     // myGameArea.clear();
     myGameArea.context.fillStyle = 'rgba(181, 211, 231, .6)';
     myGameArea.context.fillRect(0, 0, myGameArea.canvas.width, myGameArea.canvas.height)
+
+    myObstacles.forEach(obstacle => obstacle.update());
+
+    for(let i=0; i < myObstacles.length; i++)
+    {
+        for(let j=0; j < balls.length; j ++)
+        {
+            if(ballComponentColliding(balls[j], myObstacles[i]))
+            {
+                balls[j].obstacleBounce();
+
+                myObstacles[i].executeSpecial(myObstacles[i].x, myObstacles[i].y);
+                myObstacles.splice(i, 1);
+                i--;
+                myScoreboard.increase();
+            }
+        }
+    }
+
     balls.forEach(ball => {
         ball.newPos();
         ball.update();
+        ball.padCollision(myGamePiece);
+        ball.ballsCollision(balls);
     })
-    console.log(balls.length);
-    for(i=0; i < myObstacles.length; i++)
-    {
-        balls.forEach(ball => {
-            if(ballComponentColliding(ball, myObstacles[i]))
-            {
-                myObstacles[i].executeSpecial();
-                myObstacles.splice(i, 1);
-                ball.obstacleBounce();
-                i--;
-                myScoreboard.increase();
-                console.log("xxx");
-            }
 
-        })
-    }
+
     myScoreboard.update();
     if (myScoreboard.getScore() === 60)
     {
         myGameArea.gameOver();
     }
-    myObstacles.forEach(obstacle => obstacle.update());
+
+    for(let i =0; i< specials.length; i++) {
+        if (specials[i].y > 600) {
+            specials.splice(i, 1);
+        } else {
+            specials[i].newPos();
+            specials[i].updateSpecial();
+            if ( rectangleComponentColliding(specials[i], myGamePiece)) {
+                specials[i].execute();
+                specials.splice(i, 1);
+            }
+        }
+
+    }
+
     myGamePiece.newPos();
     myGamePiece.update();
+
     myGameArea.time += 20;
 }
 
+
 function moveleft() {
-    myGamePiece.speedX = -10;
+    myGamePiece.speedX = -10 * myGamePiece.moveDirection;
 }
 
 function moveright() {
-    myGamePiece.speedX = 10;
+    myGamePiece.speedX = 10 * myGamePiece.moveDirection;
 }
 
 function clearmove() {
@@ -409,6 +580,15 @@ function ballComponentColliding(ball, component) {
     return (dx * dx + dy * dy <= (ball.radius * ball.radius));
 }
 
+function rectangleComponentColliding(rect1, rect2) {
+    if (rect1.x + rect1.width >= rect2.x &&     // r1 right edge past r2 left
+        rect1.x <= rect2.x + rect2.width &&       // r1 left edge past r2 right
+        rect1.y + rect1.height >= rect2.y &&       // r1 top edge past r2 bottom
+        rect1.y <= rect2.y + rect2.height) {       // r1 bottom edge past r2 top
+        return true;
+    }
+    return false;
+}
 
 </script>
 <div style="text-align:center;width:480px;">
