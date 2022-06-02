@@ -9,9 +9,8 @@
 /*}*/
 </style>
 </head>
-<body onload="paintGame()">
+<body onload="paintGameEasy()">
 <!--<body>-->
-
 <script>
 
     // This works on all devices/browsers, and uses IndexedDBShim as a final fallback
@@ -42,6 +41,8 @@ var balls = [];
 var myScoreboard;
 var dbRecords;
 var specials = [];
+var difficultyInterval;
+var difficulty;
 
 function addDbRecord(data) {
     var open = indexedDB.open("MyDatabase", 1);
@@ -78,7 +79,7 @@ function updateDbRecords() {
 
         data.onsuccess = function() {
             dbRecords = data.result
-            let records;
+            let records = "";
 
             dbRecords.forEach(record => {
                 records += "Id: " + record.id + ", Nick: " + record.nick + ", time: " + record.time/1000 + ", points: " + record.points + "\n";
@@ -114,21 +115,94 @@ function keyUpHandler(e) {
     }
 }
 
-function paintGame() {
+function reloadObstacles() {
+    let notActives = []
+    for(let i=0; i< myObstacles.length; i++) {
+        if (!myObstacles[i].active) {
+            notActives.push(i)
+        }
+    }
+
+    if (notActives.length < 20) {
+        let randomPos = Math.floor(Math.random() * notActives.length);
+        let pos = notActives[randomPos];
+
+        let random = Math.random() * 10;
+        if (random < 5) {
+            myObstacles[pos] = new obstacleA(50, 10, "blue",  myObstacles[pos].x, myObstacles[pos].y);
+        } else {
+            myObstacles[pos] = new obstacleB(50, 10, "purple",  myObstacles[pos].x, myObstacles[pos].y);
+        }
+    }
+}
+
+function moveAndAddObstacles() {
+    myObstacles.forEach(obstacle => {
+        obstacle.y += 15
+    });
+
+    let max = Math.max(...myObstacles.map(obstacle => {return obstacle.y}));
+    console.log(max);
+    for(let j=0; j<10; j++) {
+        let random = Math.random() * 10;
+        if (random < 5) {
+            myObstacles.push(new obstacleA(50, 10, "blue",  25 +(j*55), 10));
+        } else {
+            myObstacles.push(new obstacleB(50, 10, "purple",  25 +(j*55), 10));
+        }
+    }
+
+    if ( 10 + max + 15  >= 600) {
+        myGamePiece.gameOver();
+    }
+}
+
+function paintGameEasy() {
     myGamePiece = new component(100, 20, "red", 250, 580);
-    myScoreboard = new scoreboard("black", 10, 400);
+    myScoreboard = new scoreboard("black", 50, 400);
     for(i=0; i<3 ;i++) {
-        for(j=0; j<10; j++) {
-            let random = Math.random() * 10;
-            if (random < 5) {
-                myObstacles.push(new obstacleA(50, 10, "blue",  25 +(j*55), 10 +(i*15)));
-            } else {
-                myObstacles.push(new obstacleB(50, 10, "purple",  25 +(j*55), 10 +(i*15)));
+        if (i === 1) {
+            for(j=0; j<5; j++) {
+                let random = Math.random() * 10;
+                if (random < 5) {
+                    myObstacles.push(new obstacleA(50, 10, "blue",  125 +(j*75), 10 +(i*15)));
+                } else {
+                    myObstacles.push(new obstacleB(50, 10, "purple",  125 +(j*75), 10 +(i*15)));
+                }
+            }
+        } else {
+            for(j=0; j<10; j++) {
+                let random = Math.random() * 10;
+                if (random < 5) {
+                    myObstacles.push(new obstacleA(50, 10, "blue",  25 +(j*55), 10 +(i*15)));
+                } else {
+                    myObstacles.push(new obstacleB(50, 10, "purple",  25 +(j*55), 10 +(i*15)));
+                }
             }
         }
     }
     myGameArea.paint();
+
+    difficultyInterval = setInterval(reloadObstacles, 20000);
 }
+
+    function paintGameHard() {
+        myGamePiece = new component(100, 20, "red", 250, 580);
+        myScoreboard = new scoreboard("black", 10, 400);
+        for(i=0; i<3 ;i++) {
+            for(j=0; j<10; j++) {
+               let random = Math.random() * 10;
+               if (random < 5) {
+                   myObstacles.push(new obstacleA(50, 10, "blue",  25 +(j*55), 10 +(i*15)));
+               } else {
+                  myObstacles.push(new obstacleB(50, 10, "purple",  25 +(j*55), 10 +(i*15)));
+               }
+            }
+        }
+        myGameArea.paint();
+
+        difficultyInterval = setInterval(moveAndAddObstacles, 5000);
+    }
 
 var myGameArea = {
     isStarted : false,
@@ -157,7 +231,13 @@ var myGameArea = {
                 specials = [];
                 balls.push(new ball(10, "green", (Math.random()*100 + Math.random() * 60) , (Math.random()*100 +  200 + Math.random() * 40)));
                 this.clear();
-                paintGame();
+                if (document.querySelector('input[name="difficulty"]:checked').value === "easy") {
+                    difficulty = "EASY";
+                    paintGameEasy();
+                } else {
+                    difficulty = "HARD";
+                    paintGameHard();
+                }
                 this.time = 0;
                 this.nick = nickInput.value;
                 document.onkeydown = keyDownHandler;
@@ -172,8 +252,9 @@ var myGameArea = {
         {
             this.time = 0;
             clearInterval(this.interval);
+            clearInterval(difficultyInterval);
             this.clear();
-            paintGame();
+            // paintGame();
             this.isStarted = false;
             myObstacles = [];
         }
@@ -182,11 +263,18 @@ var myGameArea = {
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
     },
     gameOver: function() {
-        return;
+        // return;
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.paint();
         addDbRecord({nick: myGameArea.nick, time: myGameArea.time, points: myScoreboard.getScore()});
         this.stop();
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        this.context.fillStyle = "black";
+        this.context.font = "30px Georgia";
+        this.context.textAlign="center";
+        this.context.fillText("GAME OVER", (this.canvas.width/2),(this.canvas.width/2));
+        myScoreboard.update();
         balls = []
     }
 }
@@ -264,12 +352,18 @@ class obstacle {
         this.color = color;
         this.x = x;
         this.y = y;
+        this.active = true
+
     }
 
     update = function () {
-        let ctx = myGameArea.context;
-        ctx.fillStyle = this.color;
-        ctx.fillRect(this.x, this.y, this.width, this.height);
+        if (this.active)
+        {
+            let ctx = myGameArea.context;
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
+
     }
     clear = function () {
         ctx.clearRect(this.x, this.y, this.width, this.height);
@@ -282,19 +376,21 @@ class obstacleA extends obstacle {
     }
 
     executeSpecial(x, y) {
-        let bonusTest = Math.random() * 10;
-        if (bonusTest <= 2) {
-            bonusTest = Math.random() * 50;
-            if (bonusTest <= 10) {
-                specials.push(new x2Special(50, 30, "pink", x, y));
-            } else if (bonusTest <= 20) {
-                specials.push(new x5Special(50, 30, "brown", x, y));
-            } else if (bonusTest <= 30) {
-                specials.push(new xlSpecial(50, 30, "purple", x, y));
-            } else if (bonusTest <= 40) {
-                specials.push(new xsSpecial(50, 30, "gray", x, y));
-            } else {
-                specials.push(new switchSpecial(50, 30, "violet", x, y));
+        if(this.active) {
+            let bonusTest = Math.random() * 10;
+            if (bonusTest <= 2) {
+                bonusTest = Math.random() * 50;
+                if (bonusTest <= 10) {
+                    specials.push(new x2Special(50, 30, "pink", x, y));
+                } else if (bonusTest <= 20) {
+                    specials.push(new x5Special(50, 30, "brown", x, y));
+                } else if (bonusTest <= 30) {
+                    specials.push(new xlSpecial(50, 30, "purple", x, y));
+                } else if (bonusTest <= 40) {
+                    specials.push(new xsSpecial(50, 30, "gray", x, y));
+                } else {
+                    specials.push(new switchSpecial(50, 30, "violet", x, y));
+                }
             }
         }
      }
@@ -306,10 +402,12 @@ class obstacleB extends obstacle {
     }
 
     executeSpecial(x, y) {
-        myGameArea.specials++;
-        if (myGameArea.specials === 5) {
-            balls.push(new ball(10, "green", (Math.random()*100 + Math.random() * 60) , (Math.random()*100 +  200 + Math.random() * 40)))
-            myGameArea.specials = 0;
+        if (this.active) {
+            myGameArea.specials++;
+            if (myGameArea.specials === 5) {
+                balls.push(new ball(10, "green", (Math.random() * 100 + Math.random() * 60), (Math.random() * 100 + 200 + Math.random() * 40)))
+                myGameArea.specials = 0;
+            }
         }
     }
 }
@@ -457,7 +555,10 @@ function scoreboard( color, x, y) {
     this.update = function() {
         ctx = myGameArea.context;
         ctx.fillStyle = color;
-        ctx.fillText("Score: " + this.score, this.x, this.y);
+        ctx.fillStyle = "black";
+        ctx.font = "16px Georgia";
+        ctx.textAlign="center";
+        ctx.fillText("Score: " + this.score, this.x + 30, this.y);
     }
     this.increase = function() {
         this.score += this.multiplier;
@@ -494,16 +595,20 @@ function updateGameArea() {
 
     for(let i=0; i < myObstacles.length; i++)
     {
-        for(let j=0; j < balls.length; j ++)
-        {
-            if(ballComponentColliding(balls[j], myObstacles[i]))
-            {
-                balls[j].obstacleBounce();
+        if (myObstacles[i].active) {
+            for (let j = 0; j < balls.length; j++) {
+                if (ballComponentColliding(balls[j], myObstacles[i])) {
+                    balls[j].obstacleBounce();
 
-                myObstacles[i].executeSpecial(myObstacles[i].x, myObstacles[i].y);
-                myObstacles.splice(i, 1);
-                i--;
-                myScoreboard.increase();
+                    myObstacles[i].executeSpecial(myObstacles[i].x, myObstacles[i].y);
+                    // myObstacles.splice(i, 1);
+                    myObstacles[i].active = false;
+                    if (difficulty === "EASY" && myObstacles.filter(obstacle => obstacle.active === true).length < 5) {
+                        reloadObstacles();
+                    }
+                    i--;
+                    myScoreboard.increase();
+                }
             }
         }
     }
@@ -596,6 +701,16 @@ function rectangleComponentColliding(rect1, rect2) {
   <button onmousedown="moveleft()" onmouseup="clearmove()" ontouchstart="moveleft()">LEFT</button>
   <button onmousedown="moveright()" onmouseup="clearmove()" ontouchstart="moveright()">RIGHT</button><br><br>
 
+</div>
+<div style="text-align:center;width:480px;">
+    <input type="radio" id="easy" value="easy" name="difficulty" checked>
+    <label for="easy">easy</label>
+</div>
+
+<div style="text-align:center;width:480px;">
+    <input type="radio" id="hard" value="hard" name="difficulty">
+    <label for="hard">hard</label>
+</div>
 </div>
 <div style="text-align:center;width:480px;">
  
